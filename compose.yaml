@@ -1,0 +1,43 @@
+
+services:
+  api-server: 
+    build: 
+      context: ./api
+      dockerfile: Dockerfile
+    container_name:  spring-api-server-digital_twin
+    ports:
+      - "8080:8080"
+    depends_on:
+      - db-server
+    networks:
+      - digital_twin-network
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:mysql://db-server:3306/digital_twin?useSSL=false&allowPublicKeyRetrieval=true
+      - SPRING_DATASOURCE_USERNAME=dbuser
+      - SPRING_DATASOURCE_PASSWORD=dbpassword
+    restart: always
+
+  db-server:
+    image: mysql:8.0
+    container_name: mysql-db-server-digital_twin
+    ports:
+      - "3306:3306"
+    environment:
+      - MYSQL_ROOT_PASSWORD=rootpassword
+      - MYSQL_DATABASE=digital_twin
+      - MYSQL_USER=dbuser
+      - MYSQL_PASSWORD=dbpassword
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - digital_twin-network
+    restart: always
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+
+networks:
+  digital_twin-network:
+    driver: bridge
+
+volumes:
+  mysql_data:
