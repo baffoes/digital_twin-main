@@ -14,7 +14,6 @@ var viewer;
 const buildingLayer = new BuildingLayer();
 const eventlayer = new  EventLayer();
 
-
 function setup() {
     const west = 5.798212900532118;
     const south = 53.19304584690279;
@@ -63,8 +62,6 @@ function setup() {
     });
 
     
-
-
     fetchEventData().then(data =>{
         data.forEach(event => {
             const{id,name,startDateEvent,endDateEvent,description} = event;
@@ -106,11 +103,9 @@ function setup() {
     const car2 = createBox(0, 0, 5, 2, 1.5, 0, Cesium.Color.PURPLE);
     const car3 = createBox(0, 0, 5, 2, 1.5, 0, Cesium.Color.BLUE);
 
-    RoadGraph.startCar(car, 8, 10,moveEntity);
-    RoadGraph.startCar(car2, 9, 22, moveEntity);
-    RoadGraph.startCar(car3, 12, 3, moveEntity);
-
-
+    RoadGraph.moveCarRandomly(car, 4,moveEntity);
+    RoadGraph.moveCarRandomly(car2, 1, moveEntity);
+    RoadGraph.moveCarRandomly(car3, 12, moveEntity);
 
     createPolygonFromXYs([
         [250, 72], // linksonder-onder
@@ -175,7 +170,6 @@ function createBox(x, y, width, depth, height, rotation, color, description) {
         description: description
     });
 }
-
 
 function createBuilding(x, y, width, depth, height, rotation, color, description,id) {
     const cords = latlonFromXY(x, y);

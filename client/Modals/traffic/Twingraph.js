@@ -77,44 +77,53 @@ class Twingraph {
         return idPath.map(id => this.nodeMap[id]?.point2).filter(Boolean);
     }
 
-    moveCarAlongPath(car, path, moveEntityCallback) {
+
+    moveCarRandomly(car, currentNodeId, moveEntityCallback) {
     let currentIndex = 0;
     let nextIndex = 1;
     let progress = 0;
     const steps = 20;
-    const targetFrameTime = 200; // Match original 105ms timing
+    const targetFrameTime = 200;
 
-    // Validate path
-    if (!path || path.length < 2) {
-        console.error('Invalid path:', path);
-        return;
-    }
+    // Recursive step function for one edge travel
+    const stepAlongEdge = (pathCoords) => {
+        if (nextIndex >= pathCoords.length) {
+            // Arrived at next node
+            currentNodeId = this.getNodeIdByCoords(pathCoords[nextIndex - 1]);
 
-    const step = (timestamp) => {
-        // Prevent execution if path is complete
-        if (nextIndex >= path.length) {
-            moveEntityCallback(car, -9999, -9999);
+            // Pick a random neighbor to go next
+            const neighbors = this.adjacencyMap[currentNodeId];
+            if (!neighbors || neighbors.length === 0) {
+                // Dead end: wait and restart or stop
+                setTimeout(() => this.moveCarRandomly(car, currentNodeId, moveEntityCallback), 5000);
+                return;
+            }
+            const nextNodeId = neighbors[Math.floor(Math.random() * neighbors.length)];
 
-            // Respawn after 5 seconds
-            setTimeout(() => {
-                currentIndex = 0;
-                nextIndex = 1;
-                progress = 0;
-                requestAnimationFrame(step);
-            }, 5000);
+            // Build path for next edge (two points)
+            const newPathCoords = [
+                this.nodeMap[currentNodeId].point2,
+                this.nodeMap[nextNodeId].point2
+            ];
+
+            // Reset indices & progress
+            currentIndex = 0;
+            nextIndex = 1;
+            progress = 0;
+
+            // Continue moving on next edge
+            stepAlongEdge(newPathCoords);
             return;
         }
 
-        const current = path[currentIndex];
-        const next = path[nextIndex];
-
-        // Validate coordinates
+        const current = pathCoords[currentIndex];
+        const next = pathCoords[nextIndex];
 
         const t = progress / steps;
         const x = current[0] + (next[0] - current[0]) * t;
         const y = current[1] + (next[1] - current[1]) * t;
-    
-        moveEntityCallback(car, x, y);        
+
+        moveEntityCallback(car, x, y);
 
         progress++;
         if (progress > steps) {
@@ -123,30 +132,37 @@ class Twingraph {
             nextIndex++;
         }
 
-        // Schedule next frame
-        requestAnimationFrame((nextTimestamp) => {
-            // Approximate 105ms timing
-            if (nextTimestamp - timestamp >= targetFrameTime) {
-                step(nextTimestamp);
-            } else {
-                setTimeout(() => step(nextTimestamp), targetFrameTime - (nextTimestamp - timestamp));
-            }
+        requestAnimationFrame(stepTimestamp => {
+            setTimeout(() => stepAlongEdge(pathCoords), targetFrameTime);
         });
     };
 
-    requestAnimationFrame(step);
-}
-
-    startCar(car, startId, endId, moveEntityCallback) {
-        const idPath = this.findPath(startId, endId);
-        if (!idPath) {
-            console.error(`No path found between ${startId} and ${endId}`);
-            return;
-        }
-
-        const coordinatePath = this.buildCoordinatePath(idPath);
-        this.moveCarAlongPath(car, coordinatePath, moveEntityCallback);
+    // Start with initial edge from currentNodeId to random neighbor
+    const neighbors = this.adjacencyMap[currentNodeId];
+    if (!neighbors || neighbors.length === 0) {
+        console.error('No neighbors to move to from node', currentNodeId);
+        return;
     }
+    const nextNodeId = neighbors[Math.floor(Math.random() * neighbors.length)];
+    const initialPathCoords = [
+        this.nodeMap[currentNodeId].point2,
+        this.nodeMap[nextNodeId].point2
+    ];
+
+    stepAlongEdge(initialPathCoords);
+ }
+
+// Helper to get node ID by coordinates (point2)
+ getNodeIdByCoords(coords) {
+    for (const nodeId in this.nodeMap) {
+        const node = this.nodeMap[nodeId];
+        if (node.point2[0] === coords[0] && node.point2[1] === coords[1]) {
+            return nodeId;
+        }
+    }
+    return null;
+ }
+
 }
 
 export default Twingraph;
