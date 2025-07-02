@@ -99,6 +99,9 @@ function setup() {
     RoadGraph.SetupGraph(createPolygonFromXYs, Cesium.Color.WHITE);
     //cylceGraph.SetupGraph(createPolygonFromXYs, Cesium.Color.RED);
 
+    RoadGraph.initTrafficLights();
+    RoadGraph.startTrafficLights(createBox)
+
     const car = createBox(0, 0, 5, 2, 1.5, 0, Cesium.Color.RED);
     const car2 = createBox(0, 0, 5, 2, 1.5, 0, Cesium.Color.PURPLE);
     const car3 = createBox(0, 0, 5, 2, 1.5, 0, Cesium.Color.BLUE);
@@ -106,13 +109,6 @@ function setup() {
     RoadGraph.moveCarRandomly(car, 4,moveEntity);
     RoadGraph.moveCarRandomly(car2, 1, moveEntity);
     RoadGraph.moveCarRandomly(car3, 12, moveEntity);
-
-    createPolygonFromXYs([
-        [250, 72], // linksonder-onder
-        [230, 85], // linksonder-boven
-        [510, 185], // midden-links-boven
-        [520, 175] // midden-links-onder
-    ], Cesium.Color.WHITE);
 
     const redPolygon = viewer.entities.add({
         name: "Spoordok",

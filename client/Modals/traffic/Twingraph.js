@@ -6,9 +6,14 @@ class Twingraph {
         this.busyness = busyness;
         this.color = color;
 
-        // Build node lookup map for O(1) access
         this.nodeMap = this.buildNodeMap();
         this.adjacencyMap = this.buildAdjacencyMap();
+
+        this.trafficLights = {}; 
+        this.trafficLightCycle = ['green', 'yellow', 'red'];
+        this.trafficLightDurations = { green: 5000, yellow: 2000, red: 5000 };
+
+        this.trafficLightEntities = {}; // Store Cesium entities for traffic lights
     }
 
     buildNodeMap() {
@@ -77,92 +82,181 @@ class Twingraph {
         return idPath.map(id => this.nodeMap[id]?.point2).filter(Boolean);
     }
 
-
     moveCarRandomly(car, currentNodeId, moveEntityCallback) {
-    let currentIndex = 0;
-    let nextIndex = 1;
-    let progress = 0;
-    const steps = 20;
-    const targetFrameTime = 200;
+        let currentIndex = 0;
+        let nextIndex = 1;
+        let progress = 0;
+        const steps = 20;
+        const targetFrameTime = 200;
 
-    // Recursive step function for one edge travel
-    const stepAlongEdge = (pathCoords) => {
-        if (nextIndex >= pathCoords.length) {
-            // Arrived at next node
-            currentNodeId = this.getNodeIdByCoords(pathCoords[nextIndex - 1]);
+        const stepAlongEdge = (pathCoords, fromNodeId) => {
+            // Check traffic light at fromNodeId before moving forward
+            const lightState = this.getTrafficLightState(fromNodeId);
 
-            // Pick a random neighbor to go next
-            const neighbors = this.adjacencyMap[currentNodeId];
-            if (!neighbors || neighbors.length === 0) {
-                // Dead end: wait and restart or stop
-                setTimeout(() => this.moveCarRandomly(car, currentNodeId, moveEntityCallback), 5000);
+            if (progress === 19 && lightState === 'red') {
+                // Wait and re-check after 500ms
+                setTimeout(() => stepAlongEdge(pathCoords, fromNodeId), 500);
                 return;
             }
-            const nextNodeId = neighbors[Math.floor(Math.random() * neighbors.length)];
+            // If green or yellow, continue movement along edge
 
-            // Build path for next edge (two points)
-            const newPathCoords = [
-                this.nodeMap[currentNodeId].point2,
-                this.nodeMap[nextNodeId].point2
-            ];
+            if (nextIndex >= pathCoords.length) {
+                // Arrived at next node
+                currentNodeId = this.getNodeIdByCoords(pathCoords[nextIndex - 1]);
 
-            // Reset indices & progress
-            currentIndex = 0;
-            nextIndex = 1;
-            progress = 0;
+                // Pick a random neighbor to go next
+                const neighbors = this.adjacencyMap[currentNodeId];
+                if (!neighbors || neighbors.length === 0) {
+                    setTimeout(() => this.moveCarRandomly(car, currentNodeId, moveEntityCallback), 5000);
+                    return;
+                }
+                const nextNodeId = neighbors[Math.floor(Math.random() * neighbors.length)];
 
-            // Continue moving on next edge
-            stepAlongEdge(newPathCoords);
+                const newPathCoords = [
+                    this.nodeMap[currentNodeId].point2,
+                    this.nodeMap[nextNodeId].point2
+                ];
+
+                currentIndex = 0;
+                nextIndex = 1;
+                progress = 0;
+
+                // Continue moving on next edge, checking traffic light at currentNodeId
+                stepAlongEdge(newPathCoords, currentNodeId);
+                return;
+            }
+
+            const current = pathCoords[currentIndex];
+            const next = pathCoords[nextIndex];
+
+            const t = progress / steps;
+            const x = current[0] + (next[0] - current[0]) * t;
+            const y = current[1] + (next[1] - current[1]) * t;
+
+            moveEntityCallback(car, x, y);
+
+            progress++;
+            if (progress > steps) {
+                progress = 0;
+                currentIndex++;
+                nextIndex++;
+            }
+
+            requestAnimationFrame(stepTimestamp => {
+                setTimeout(() => stepAlongEdge(pathCoords, fromNodeId), targetFrameTime);
+            });
+        };
+
+        const neighbors = this.adjacencyMap[currentNodeId];
+        if (!neighbors || neighbors.length === 0) {
+            console.error('No neighbors to move to from node', currentNodeId);
             return;
         }
+        const nextNodeId = neighbors[Math.floor(Math.random() * neighbors.length)];
+        const initialPathCoords = [
+            this.nodeMap[currentNodeId].point2,
+            this.nodeMap[nextNodeId].point2
+        ];
 
-        const current = pathCoords[currentIndex];
-        const next = pathCoords[nextIndex];
-
-        const t = progress / steps;
-        const x = current[0] + (next[0] - current[0]) * t;
-        const y = current[1] + (next[1] - current[1]) * t;
-
-        moveEntityCallback(car, x, y);
-
-        progress++;
-        if (progress > steps) {
-            progress = 0;
-            currentIndex++;
-            nextIndex++;
-        }
-
-        requestAnimationFrame(stepTimestamp => {
-            setTimeout(() => stepAlongEdge(pathCoords), targetFrameTime);
-        });
-    };
-
-    // Start with initial edge from currentNodeId to random neighbor
-    const neighbors = this.adjacencyMap[currentNodeId];
-    if (!neighbors || neighbors.length === 0) {
-        console.error('No neighbors to move to from node', currentNodeId);
-        return;
+        stepAlongEdge(initialPathCoords, currentNodeId);
     }
-    const nextNodeId = neighbors[Math.floor(Math.random() * neighbors.length)];
-    const initialPathCoords = [
-        this.nodeMap[currentNodeId].point2,
-        this.nodeMap[nextNodeId].point2
-    ];
 
-    stepAlongEdge(initialPathCoords);
- }
+    getNodeIdByCoords(coords) {
+        for (const nodeId in this.nodeMap) {
+            const node = this.nodeMap[nodeId];
+            if (node.point2[0] === coords[0] && node.point2[1] === coords[1]) {
+                return nodeId;
+            }
+        }
+        return null;
+    }
 
-// Helper to get node ID by coordinates (point2)
- getNodeIdByCoords(coords) {
+    initTrafficLights() {
     for (const nodeId in this.nodeMap) {
-        const node = this.nodeMap[nodeId];
-        if (node.point2[0] === coords[0] && node.point2[1] === coords[1]) {
-            return nodeId;
+        if ((this.adjacencyMap[nodeId]?.length ?? 0) > 1) {
+            const randomState = this.trafficLightCycle[
+                Math.floor(Math.random() * this.trafficLightCycle.length)
+            ];
+            this.trafficLights[nodeId] = {
+                state: randomState,
+                timeoutId: null,
+            };
         }
     }
-    return null;
- }
+   }
 
+
+    startTrafficLights(createBox) {
+        for (const nodeId in this.trafficLights) {
+            const light = this.trafficLights[nodeId];
+            const node = this.nodeMap[nodeId];
+            const colorMap = {
+                red: Cesium.Color.RED,
+                yellow: Cesium.Color.YELLOW,
+                green: Cesium.Color.GREEN,
+            };
+            // create initial box and store the entity reference
+            this.trafficLightEntities[nodeId] = createBox(
+                node.point2[0],
+                node.point2[1],
+                1,
+                2,
+                1.5,
+                0,
+                colorMap[light.state]
+            );
+            this.cycleTrafficLight(nodeId, createBox);
+        }
+    }
+
+    cycleTrafficLight(nodeId, createBox) {
+        const light = this.trafficLights[nodeId];
+        if (!light) return;
+
+        const cycleOrder = ['green', 'yellow', 'red'];
+        const durations = { green: 5000, yellow: 2000, red: 5000 };
+
+        let currentIndex = cycleOrder.indexOf(light.state);
+        currentIndex = (currentIndex + 1) % cycleOrder.length;
+        light.state = cycleOrder[currentIndex];
+
+        const colorMap = {
+            red: Cesium.Color.RED,
+            yellow: Cesium.Color.YELLOW,
+            green: Cesium.Color.GREEN,
+        };
+
+        const entity = this.trafficLightEntities[nodeId];
+        if (entity && entity.box) {
+            // Update material color for the box entity
+            entity.box.material = colorMap[light.state];
+        } else if (entity && entity.material) {
+            // fallback if entity has color property
+            entity.material = colorMap[light.state];
+        } else {
+            // fallback: recreate the box entity
+            const node = this.nodeMap[nodeId];
+            if (!node) return;
+            this.trafficLightEntities[nodeId] = createBox(
+                node.point2[0],
+                node.point2[1],
+                1,
+                2,
+                1.5,
+                0,
+                colorMap[light.state]
+            );
+        }
+
+        if (light.timeoutId) clearTimeout(light.timeoutId);
+        light.timeoutId = setTimeout(() => {
+            this.cycleTrafficLight(nodeId, createBox);
+        }, durations[light.state]);
+    }
+
+    getTrafficLightState(nodeId) {
+        return this.trafficLights[nodeId]?.state ?? 'green';
+    }
 }
 
 export default Twingraph;
